@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wheelie Master: 2D Blueprint Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            font-family: 'Inter', sans-serif;
+            touch-action: none; /* Prevent scroll on touch */
+        }
+        
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .pointer-events-auto {
+            pointer-events: auto;
+        }
+
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 10;
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body class="text-white select-none">
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+    <div class="scanlines"></div>
+
+    <!-- UI Overlay -->
+    <div id="uiContainer" class="ui-layer p-4 md:p-8">
+        
+        <!-- HUD -->
+        <div id="hud" class="hidden flex justify-between items-start w-full drop-shadow-md z-20">
+            <div>
+                <h2 class="text-4xl md:text-6xl font-black italic text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]" id="scoreDisplay">0</h2>
+                <div class="text-xl md:text-2xl font-bold text-yellow-400 mt-1 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" id="multiplierDisplay">1.0x Combo</div>
+                <div class="text-lg md:text-xl font-bold text-green-400 mt-1 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]" id="runCoinsDisplay">+0 Coins</div>
+            </div>
+            <div class="text-right">
+                <div class="text-lg md:text-xl font-bold text-gray-200" id="speedDisplay">45 MPH</div>
+                <div class="text-sm font-bold text-gray-400 mt-1" id="angleDisplay">Angle: 0°</div>
+                <div class="text-sm font-bold text-blue-400 mt-1">[F] for Flips!</div>
+            </div>
+        </div>
+
+        <!-- Touch Controls -->
+        <div id="touchControls" class="hidden md:hidden flex justify-between items-end w-full h-full pb-8 px-4 z-20 pointer-events-auto">
+            <button id="btnLean" class="bg-red-500/50 active:bg-red-500/80 border-2 border-red-400 w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-sm backdrop-blur-sm transition-colors">
+                LEAN
+            </button>
+            <button id="btnFlip" class="bg-purple-500/50 active:bg-purple-500/80 border-2 border-purple-400 w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-sm backdrop-blur-sm transition-colors mb-8">
+                FLIP
+            </button>
+            <button id="btnWheelie" class="bg-blue-500/50 active:bg-blue-500/80 border-2 border-blue-400 w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-sm backdrop-blur-sm transition-colors">
+                LIFT
+            </button>
+        </div>
+
+        <!-- Loading Screen -->
+        <div id="loadingScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black z-50 pointer-events-auto">
+            <h1 class="text-5xl font-black italic text-white animate-pulse">CONNECTING...</h1>
+            <p class="text-gray-400 mt-4">Loading your garage from the cloud</p>
+        </div>
+
+        <!-- Main Menu -->
+        <div id="mainMenu" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-30 pointer-events-auto">
+            
+            <!-- Global Coins Display -->
+            <div class="absolute top-4 right-8 bg-gray-900 border-2 border-yellow-500 px-6 py-2 rounded-full flex items-center shadow-[0_0_15px_rgba(234,179,8,0.3)]">
+                <span class="text-2xl mr-2">💰</span>
+                <span id="globalCoinsDisplay" class="text-2xl font-black text-yellow-400">0</span>
+            </div>
+
+            <!-- Home Screen -->
+            <div id="homeScreen" class="flex flex-col items-center">
+                <h1 class="text-5xl md:text-7xl font-black italic mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">WHEELIE LIFE</h1>
+                <p class="text-red-400 font-bold mb-8 text-center max-w-md border border-red-500/50 bg-red-900/30 p-2 rounded">RULE: Once you wheelie, if your front tire hits the ground, YOU LOSE!</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button id="btnRideNow" class="col-span-1 md:col-span-2 px-8 py-4 bg-gradient-to-r from-red-500 to-orange-600 text-white font-bold text-2xl rounded-xl hover:scale-105 transition-transform shadow-[0_0_20px_rgba(239,68,68,0.6)]">
+                        Ride Now (Space)
+                    </button>
+                    <button id="btnShowVehicles" class="px-8 py-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold text-xl rounded-xl hover:scale-105 transition-transform">
+                        Garage (Owned)
+                    </button>
+                    <button id="btnShowShop" class="px-8 py-4 bg-gradient-to-r from-yellow-500 to-amber-600 text-white font-bold text-xl rounded-xl hover:scale-105 transition-transform shadow-[0_0_15px_rgba(245,158,11,0.5)]">
+                        Shop
+                    </button>
+                    <button id="btnShowAvatars" class="px-8 py-4 bg-gray-700 text-white font-bold text-xl rounded-xl hover:bg-gray-600 transition-colors">
+                        Avatars
+                    </button>
+                    <button id="btnShowMaps" class="px-8 py-4 bg-gray-700 text-white font-bold text-xl rounded-xl hover:bg-gray-600 transition-colors">
+                        Maps
+                    </button>
+                </div>
+            </div>
+
+            <!-- Garage Selection -->
+            <div id="vehicleSelection" class="hidden flex flex-col items-center w-full max-w-6xl px-4">
+                <h1 class="text-4xl md:text-5xl font-black italic mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-600">MY GARAGE</h1>
+                <h3 class="text-xl font-bold mb-4 border-b-2 border-gray-600 pb-2 text-white">Select Your Ride</h3>
+                <div id="vehicleGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto max-h-[55vh] w-full p-4 border border-gray-700 rounded-xl bg-gray-900/50 custom-scrollbar"></div>
+                <button class="btnBackToHome mt-6 px-8 py-3 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition-colors">Back to Home</button>
+            </div>
+
+            <!-- Shop Selection -->
+            <div id="shopSelection" class="hidden flex flex-col items-center w-full max-w-6xl px-4">
+                <h1 class="text-4xl md:text-5xl font-black italic mb-2 text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-600">DEALERSHIP</h1>
+                <div class="flex justify-between items-center w-full max-w-6xl mb-4 border-b-2 border-gray-600 pb-2">
+                    <h3 class="text-xl font-bold text-white">Buy New Vehicles</h3>
+                    <select id="shopSort" class="bg-gray-800 text-white font-bold border-2 border-gray-600 rounded-lg px-3 py-1 outline-none focus:border-yellow-400">
+                        <option value="price_asc">Price: Low to High</option>
+                        <option value="price_desc">Price: High to Low</option>
+                        <option value="name_asc">Name: A to Z</option>
+                        <option value="name_desc">Name: Z to A</option>
+                    </select>
+                </div>
+                <div id="shopGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto max-h-[55vh] w-full p-4 border border-gray-700 rounded-xl bg-gray-900/50 custom-scrollbar"></div>
+                <button class="btnBackToHome mt-6 px-8 py-3 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition-colors">Back to Home</button>
+            </div>
+
+            <!-- Avatar Selection -->
+            <div id="avatarSelection" class="hidden flex flex-col items-center w-full max-w-4xl px-4">
+                <h1 class="text-4xl font-black italic mb-2">AVATARS</h1>
+                <div id="avatarGrid" class="flex flex-wrap justify-center gap-4 overflow-y-auto max-h-[55vh] w-full p-4"></div>
+                <button class="btnBackToHome mt-8 px-6 py-2 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition-colors">Back</button>
+            </div>
+
+            <!-- Map Selection -->
+            <div id="mapSelection" class="hidden flex flex-col items-center w-full max-w-4xl px-4">
+                <h1 class="text-4xl font-black italic mb-2">MAPS</h1>
+                <div id="mapGrid" class="grid grid-cols-2 md:grid-cols-5 gap-4 overflow-y-auto max-h-[55vh] w-full p-4"></div>
+                <button class="btnBackToHome mt-8 px-6 py-2 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition-colors">Back</button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-red-950/95 backdrop-blur-md z-40 pointer-events-auto">
+            <h1 id="crashReason" class="text-5xl md:text-7xl font-black italic text-red-500 mb-2 drop-shadow-lg text-center">CRASHED!</h1>
+            <p class="text-2xl text-gray-200 mb-6">Distance Score: <span id="finalScore" class="font-bold text-white">0</span></p>
+            
+            <div class="bg-gray-900 border-2 border-yellow-500 p-6 rounded-2xl mb-8 flex flex-col items-center shadow-[0_0_30px_rgba(234,179,8,0.2)]">
+                <h3 class="text-xl font-bold text-gray-400 mb-2">Run Earnings</h3>
+                <div class="text-4xl font-black text-yellow-400 flex items-center">
+                    💰 +<span id="finalCoinsEarned">0</span>
+                </div>
+            </div>
+
+            <button id="btnRestart" class="px-10 py-5 bg-white text-red-900 font-black text-3xl rounded-full hover:bg-gray-200 transition-colors shadow-[0_0_20px_rgba(255,255,255,0.5)]">
+                RIDE AGAIN
+            </button>
+            <button id="btnGarageFromDeath" class="mt-4 px-6 py-2 text-gray-400 hover:text-white transition-colors">
+                Back to Menu
+            </button>
+        </div>
+
+        <!-- Pause Screen -->
+        <div id="pauseScreen" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md z-40 pointer-events-auto">
+            <h1 class="text-6xl md:text-8xl font-black italic text-white mb-2 drop-shadow-lg tracking-widest">PAUSED</h1>
+            <p class="text-xl text-gray-300 mb-8">Press 'P' to Resume</p>
+            
+            <button id="btnResume" class="px-10 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black text-2xl rounded-xl transition-colors shadow-[0_0_15px_rgba(37,99,235,0.5)] mb-4">
+                RESUME
+            </button>
+            <button id="btnQuitToMenu" class="px-8 py-3 bg-gray-800 hover:bg-gray-700 text-white font-bold text-xl rounded-xl border border-gray-600 transition-colors">
+                QUIT TO MENU
+            </button>
+        </div>
+
+    </div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// --- Firebase Config & State ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'wheelie-master-v2';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+
+let app, auth, db, userId;
+let isCloudEnabled = firebaseConfig && Object.keys(firebaseConfig).length > 0;
+
+let userData = {
+    coins: 0,
+    unlocked: ['starter_bike'],
+    unlockedAvatars: ['stick_black'],
+    currentBike: 'starter_bike',
+    currentAvatarId: 'stick_black',
+    currentMapLevel: 1
+};
+
+async function initFirebase() {
+    if (!isCloudEnabled) {
+        console.log("No Firebase config found. Running in local memory mode.");
+        document.getElementById('loadingScreen').classList.add('hidden');
+        document.getElementById('mainMenu').classList.remove('hidden');
+        buildUI();
+        return;
+    }
+
+    try {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        if (typeof __initial_auth_token !== 'undefined') {
+            await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+            await signInAnonymously(auth);
+        }
+        
+        userId = auth.currentUser.uid;
+        
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'saveData', 'gameProgress');
+        const snap = await getDoc(docRef);
+        
+        if (snap.exists()) {
+            const data = snap.data();
+            userData.coins = data.coins || 0;
+            userData.unlocked = data.unlocked || ['starter_bike'];
+            userData.unlockedAvatars = data.unlockedAvatars || ['stick_black'];
+            userData.currentBike = data.currentBike || 'starter_bike';
+            userData.currentAvatarId = data.currentAvatarId || 'stick_black';
+            userData.currentMapLevel = data.currentMapLevel || 1;
+        } else {
+            // First time player
+            await saveUserData();
+        }
+    } catch (e) {
+        console.error("Firebase Init Error:", e);
+    }
+
+    document.getElementById('loadingScreen').classList.add('hidden');
+    document.getElementById('mainMenu').classList.remove('hidden');
+    
+    // Apply saved loadout
+    currentBike = userData.currentBike;
+    currentMapLevel = userData.currentMapLevel;
+    if (typeof Avatars !== 'undefined') {
+        currentAvatar = Avatars.find(a => a.id === userData.currentAvatarId) || Avatars[0];
+    }
+    
+    buildUI();
+}
+
+async function saveUserData() {
+    if (!isCloudEnabled || !userId) return;
+    
+    // Sync active loadout before saving
+    userData.currentBike = typeof currentBike !== 'undefined' ? currentBike : 'starter_bike';
+    userData.currentMapLevel = typeof currentMapLevel !== 'undefined' ? currentMapLevel : 1;
+    if (typeof currentAvatar !== 'undefined') userData.currentAvatarId = currentAvatar.id;
+
+    try {
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'saveData', 'gameProgress');
+        await setDoc(docRef, userData);
+    } catch (e) {
+        console.error("Save Error:", e);
+    }
+}
+
+
+// --- Game Constants & State ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let GAME_WIDTH = window.innerWidth;
+let GAME_HEIGHT = window.innerHeight;
+
+let GROUND_Y;
+let GRAVITY = 0.012; 
+let SCROLL_SPEED = 15; 
+
+let gameState = 'menu'; // menu, playing, gameover
+let score = 0;
+let runCoins = 0;
+let scoreMultiplier = 1.0;
+let framesInAir = 0;
+let globalDistance = 0;
+let currentBike = 'starter_bike'; 
+let currentMapLevel = 1; 
+let isPaused = false;
+
+let terrain = [];
+const terrainSegmentWidth = 100;
+let terrainState = 'flat';
+let terrainStateTimer = 0;
+let currentSlope = 0;
+
+const keys = {
+    wheelie: false,
+    lean: false,
+    flip: false
+};
+
+const Avatars = [
+    { id: 'stick_black', name: 'Classic Stick', color: '#000000', thickness: 6, price: 0 },
+    { id: 'stick_white', name: 'Ghost Rider', color: '#ffffff', thickness: 6, price: 50 },
+    { id: 'stick_blue', name: 'Ocean Blue', color: '#3b82f6', thickness: 6, price: 100 },
+    { id: 'stick_red', name: 'Crimson', color: '#ef4444', thickness: 6, price: 150 },
+    { id: 'stick_green', name: 'Slime', color: '#22c55e', thickness: 6, price: 200 },
+    { id: 'stick_neon', name: 'Neon Cyber', color: '#00ffcc', thickness: 7, price: 250 },
+    { id: 'stick_purple', name: 'Amethyst', color: '#9333ea', thickness: 6, price: 300 },
+    { id: 'stick_fire', name: 'Magma', color: '#f97316', thickness: 7, price: 400 },
+    { id: 'stick_gold', name: '24k Gold', color: '#fbbf24', thickness: 8, price: 500 }
+];
+let currentAvatar = Avatars[0];
+
+// --- Resize Handling ---
+function resize() {
+    GAME_WIDTH = window.innerWidth;
+    GAME_HEIGHT = window.innerHeight;
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+    GROUND_Y = GAME_HEIGHT - 80;
+    
+    if (GAME_WIDTH < 768 && gameState === 'playing') {
+        document.getElementById('touchControls').classList.remove('hidden');
+    } else {
+        document.getElementById('touchControls').classList.add('hidden');
+    }
+}
+window.addEventListener('resize', resize);
+resize();
+
+function togglePause() {
+    if (gameState === 'playing') {
+        isPaused = !isPaused;
+        if (isPaused) {
+            document.getElementById('pauseScreen').classList.remove('hidden');
+        } else {
+            document.getElementById('pauseScreen').classList.add('hidden');
+        }
+    }
+}
+
+// --- Input Handling ---
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+        togglePause();
+    }
+    if (e.code === 'Space' && gameState === 'menu' && !document.getElementById('homeScreen').classList.contains('hidden')) {
+        e.preventDefault();
+        initGame(currentBike);
+    } else if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+        if (gameState === 'playing') e.preventDefault();
+        keys.wheelie = true;
+    }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.lean = true;
+    if (e.code === 'KeyF') {
+        if (gameState === 'playing') e.preventDefault();
+        keys.flip = true;
+    }
+});
+window.addEventListener('keyup', (e) => {
+    if(e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keys.wheelie = false;
+    if(e.code === 'ArrowDown' || e.code === 'KeyS') keys.lean = false;
+    if(e.code === 'KeyF') keys.flip = false;
+});
+window.addEventListener('mousedown', (e) => {
+    if (gameState === 'menu' && !document.getElementById('homeScreen').classList.contains('hidden')) {
+        if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+            initGame(currentBike);
+        }
+    } else if (gameState === 'playing') {
+        if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+            keys.wheelie = true;
+        }
+    }
+});
+window.addEventListener('mouseup', (e) => {
+    if (gameState === 'playing') keys.wheelie = false;
+});
+
+document.getElementById('btnWheelie').addEventListener('touchstart', (e) => { e.preventDefault(); keys.wheelie = true; });
+document.getElementById('btnWheelie').addEventListener('touchend', (e) => { e.preventDefault(); keys.wheelie = false; });
+document.getElementById('btnLean').addEventListener('touchstart', (e) => { e.preventDefault(); keys.lean = true; });
+document.getElementById('btnLean').addEventListener('touchend', (e) => { e.preventDefault(); keys.lean = false; });
+document.getElementById('btnFlip').addEventListener('touchstart', (e) => { e.preventDefault(); keys.flip = true; });
+document.getElementById('btnFlip').addEventListener('touchend', (e) => { e.preventDefault(); keys.flip = false; });
+
+// --- Asset Blueprint Library ---
+const VehicleBlueprints = {};
+
+function createPedalBike() {
+    return {
+        name: "Classic BMX",
+        category: "Pedal Bike",
+        price: 0,
+        wheelbase: 110,
+        rearWheelR: 24,
+        frontWheelR: 24,
+        wheelType: 'spoke',
+        massCenter: 40,
+        power: 0.009, // Very weak, hard to wheelie
+        stability: 0.95,
+        hasPedals: true,
+        posture: { pegs: { x: 50, y: -20 }, seat: { x: 30, y: -65 }, bars: { x: 90, y: -90 } },
+        drawChassis: function(ctx, wheelRot = 0) {
+            ctx.strokeStyle = "#e2e8f0";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 0); ctx.lineTo(50, -20); // Chainstay
+            ctx.lineTo(30, -65); ctx.lineTo(0, 0); // Seat tube & stay
+            ctx.moveTo(50, -20); ctx.lineTo(this.posture.bars.x - 5, -70); // Down tube
+            ctx.lineTo(30, -65); // Top tube
+            ctx.stroke();
+            
+            // Forks
+            ctx.beginPath(); ctx.moveTo(this.posture.bars.x - 5, -70); ctx.lineTo(this.wheelbase, 0); ctx.stroke();
+            // Handlebars
+            ctx.beginPath(); ctx.moveTo(this.posture.bars.x - 5, -70); ctx.lineTo(this.posture.bars.x, this.posture.bars.y); ctx.stroke();
+            // Seat
+            ctx.fillStyle = "#111"; ctx.fillRect(15, -70, 30, 8);
+            // Pedals
+            let px = 50 + Math.cos(wheelRot) * 12;
+            let py = -20 + Math.sin(wheelRot) * 12;
+            ctx.strokeStyle = "#111"; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(50, -20); ctx.lineTo(px, py); ctx.stroke();
+            ctx.fillStyle = "#333"; ctx.fillRect(px - 5, py - 3, 10, 6);
+            ctx.beginPath(); ctx.arc(50, -20, 8, 0, Math.PI*2); ctx.fill(); // Bottom bracket
+        }
+    };
+}
+
+function createEBikeMoto(id, name, color, isMoto, price) {
+    return {
+        name, price, category: isMoto ? "E-Moto" : "E-Bike",
+        wheelbase: isMoto ? 130 : 115,
+        rearWheelR: isMoto ? 26 : 22, frontWheelR: isMoto ? 26 : 22,
+        wheelType: isMoto ? 'knobby' : 'spoke', massCenter: isMoto ? 60 : 50,
+        power: isMoto ? 0.016 : 0.011, stability: isMoto ? 0.90 : 0.93,
+        posture: { pegs: { x: 40, y: -20 }, seat: { x: 30, y: isMoto ? -75 : -65 }, bars: { x: isMoto ? 100 : 90, y: isMoto ? -95 : -85 } },
+        drawChassis: function(ctx) {
+            ctx.strokeStyle = color; ctx.lineWidth = isMoto ? 6 : 4;
+            ctx.beginPath(); ctx.moveTo(30, -30); ctx.lineTo(70, -20); ctx.lineTo(this.posture.bars.x - 10, -70); ctx.lineTo(this.posture.seat.x + 30, this.posture.seat.y + 5); ctx.closePath(); ctx.stroke();
+            ctx.fillStyle = "#1f2937"; ctx.beginPath(); ctx.moveTo(40, -30); ctx.lineTo(75, -25); ctx.lineTo(85, -60); ctx.lineTo(50, -65); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = isMoto ? "#3b82f6" : "#10b981"; ctx.fillRect(55, -45, 10, 3);
+            ctx.fillStyle = "#111"; ctx.fillRect(this.posture.seat.x - 20, this.posture.seat.y, 50, 10);
+            ctx.strokeStyle = "#d1d5db"; ctx.lineWidth = isMoto ? 5 : 3; ctx.beginPath(); ctx.moveTo(this.posture.bars.x - 5, this.posture.bars.y + 10); ctx.lineTo(this.wheelbase, 0); ctx.stroke();
+            ctx.strokeStyle = "#333"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(this.posture.bars.x - 10, this.posture.bars.y + 10); ctx.lineTo(this.posture.bars.x, this.posture.bars.y); ctx.stroke();
+            ctx.strokeStyle = "#444"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(30, -30); ctx.stroke();
+        }
+    };
+}
+
+function createScooter(id, name, color, powerLevel, price) {
+    return {
+        name, price, category: "E-Scooter",
+        wheelbase: 90, rearWheelR: 12, frontWheelR: 12, wheelType: 'alloy', massCenter: 40,
+        power: 0.009 * powerLevel, stability: 0.85, 
+        posture: { pegs: { x: 30, y: -18 }, seat: null, bars: { x: 75, y: -100 } },
+        drawChassis: function(ctx) {
+            ctx.fillStyle = "#222"; ctx.strokeStyle = color; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(20, -15); ctx.lineTo(80, -15); ctx.lineTo(85, -25); ctx.lineTo(20, -22); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#111"; ctx.fillRect(25, -21, 50, 4);
+            ctx.strokeStyle = "#111"; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(82, -20); ctx.lineTo(this.posture.bars.x, this.posture.bars.y + 5); ctx.stroke();
+            ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(82, -20); ctx.lineTo(this.wheelbase, 0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(20, -15); ctx.lineTo(0, 0); ctx.stroke();
+            ctx.strokeStyle = "#111"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(this.posture.bars.x - 15, this.posture.bars.y); ctx.lineTo(this.posture.bars.x + 5, this.posture.bars.y); ctx.stroke();
+            ctx.fillStyle = "white"; ctx.fillRect(this.posture.bars.x, this.posture.bars.y + 10, 6, 12);
+        }
+    };
+}
+
+// Generate Realistic Vehicles with Prices
+VehicleBlueprints['starter_bike'] = createPedalBike();
+
+const eMotoList = [
+    {n: "Sur-Ron X", c: "#22c55e", m: true, p: 6750}, {n: "Talaria Sting", c: "#3b82f6", m: true, p: 6000}, 
+    {n: "Cake Kalk", c: "#ffffff", m: true, p: 19500}, {n: "Zero FX", c: "#d97706", m: true, p: 18000}, 
+    {n: "Super73 RX", c: "#dc2626", m: false, p: 5250}, {n: "Onyx RCR", c: "#78350f", m: false, p: 6300}, 
+    {n: "RadRunner", c: "#f97316", m: false, p: 2250}, {n: "Stealth Bomber", c: "#1d4ed8", m: false, p: 13500}
+];
+
+const scooterList = [
+    {n: "Dualtron Thunder", c: "#ef4444", pow: 1.5, p: 5250}, {n: "Kaabo Wolf", c: "#eab308", pow: 1.5, p: 4500},
+    {n: "Xiaomi Pro 2", c: "#1f2937", pow: 0.7, p: 900}, {n: "Segway Max", c: "#6b7280", pow: 0.8, p: 1200},
+    {n: "Nami Burn-E", c: "#10b981", pow: 1.6, p: 6750}, {n: "Zero 11X", c: "#000000", pow: 1.7, p: 5700}
+];
+
+eMotoList.forEach((v, i) => { VehicleBlueprints[`ebike_${i}`] = createEBikeMoto(`ebike_${i}`, v.n, v.c, v.m, v.p); });
+scooterList.forEach((v, i) => { VehicleBlueprints[`scoot_${i}`] = createScooter(`scoot_${i}`, v.n, v.c, v.pow, v.p); });
+
+
+// --- Drawing Helpers ---
+const tempCanvas = document.createElement('canvas');
+tempCanvas.width = 160;
+tempCanvas.height = 100;
+const tCtx = tempCanvas.getContext('2d');
+
+function generateThumbnail(key) {
+    const v = VehicleBlueprints[key];
+    tCtx.clearRect(0, 0, 160, 100);
+    tCtx.save();
+    tCtx.translate(40, 75); 
+    tCtx.scale(0.5, 0.5);   
+    v.drawChassis(tCtx, 0);
+    tCtx.save(); tCtx.translate(v.wheelbase, 0); drawWheel(tCtx, v.frontWheelR, 0, v.wheelType); tCtx.restore();
+    drawWheel(tCtx, v.rearWheelR, 0, v.wheelType);
+    tCtx.restore();
+    return tempCanvas.toDataURL();
+}
+
+function drawWheel(ctx, radius, rotation, type) {
+    ctx.save(); ctx.rotate(rotation);
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = type === 'alloy' ? "#555" : "#ddd"; ctx.beginPath(); ctx.arc(0, 0, radius * 0.7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(0, 0, radius * 0.55, 0, Math.PI * 2); ctx.fill();
+
+    if (type === 'spoke') {
+        ctx.strokeStyle = "#999"; ctx.lineWidth = 1;
+        for (let i = 0; i < 18; i++) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(radius * 0.7, 0); ctx.stroke(); ctx.rotate(Math.PI * 2 / 18); }
+    } else if (type === 'alloy') {
+        ctx.fillStyle = "#444";
+        for (let i = 0; i < 5; i++) { 
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(radius * 0.7, 10); ctx.lineTo(radius * 0.7, -10); ctx.fill(); 
+            ctx.rotate(Math.PI * 2 / 5); 
+        }
+    }
+    ctx.restore();
+}
+
+function drawRider(ctx, avatar, posture, wheelRot = 0, hasPedals = false) {
+    ctx.strokeStyle = avatar.color; ctx.fillStyle = avatar.color; ctx.lineWidth = avatar.thickness; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    const isStanding = !posture.seat;
+    const hipX = isStanding ? posture.pegs.x - 10 : posture.seat.x;
+    const hipY = isStanding ? posture.pegs.y - 45 : posture.seat.y - 10;
+    const shoulderX = hipX + 15; const shoulderY = hipY - 25;
+    const headX = shoulderX + 5; const headY = shoulderY - 15;
+
+    ctx.beginPath(); ctx.arc(headX, headY, 9, 0, Math.PI * 2); ctx.fill(); // Head
+    ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(shoulderX, shoulderY); ctx.stroke(); // Spine
+    const elbowX = shoulderX + (posture.bars.x - shoulderX) / 2; const elbowY = shoulderY + 15;
+    ctx.beginPath(); ctx.moveTo(shoulderX, shoulderY); ctx.lineTo(elbowX, elbowY); ctx.lineTo(posture.bars.x, posture.bars.y); ctx.stroke(); // Arm
+    
+    let targetPegX = posture.pegs.x;
+    let targetPegY = posture.pegs.y;
+    
+    if (hasPedals) {
+        targetPegX += Math.cos(wheelRot) * 12;
+        targetPegY += Math.sin(wheelRot) * 12;
+    }
+
+    const kneeX = hipX + (targetPegX - hipX) / 2 + (isStanding ? 10 : 15); 
+    const kneeY = hipY + (targetPegY - hipY) / 2 + (isStanding ? 5 : -10);
+    
+    ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(kneeX, kneeY); ctx.lineTo(targetPegX, targetPegY); ctx.stroke(); // Leg
+}
+
+
+// --- Build UI Grids ---
+function buildUI() {
+    document.getElementById('globalCoinsDisplay').innerText = userData.coins.toLocaleString();
+    
+    const vGrid = document.getElementById('vehicleGrid');
+    const sGrid = document.getElementById('shopGrid');
+    const aGrid = document.getElementById('avatarGrid');
+    
+    vGrid.innerHTML = '';
+    sGrid.innerHTML = '';
+    aGrid.innerHTML = '';
+
+    // Handle Shop Sorting
+    const sortOption = document.getElementById('shopSort').value;
+    const shopKeys = Object.keys(VehicleBlueprints).filter(k => !userData.unlocked.includes(k));
+    
+    shopKeys.sort((a, b) => {
+        let vA = VehicleBlueprints[a], vB = VehicleBlueprints[b];
+        if (sortOption === 'price_asc') return vA.price - vB.price;
+        if (sortOption === 'price_desc') return vB.price - vA.price;
+        if (sortOption === 'name_asc') return vA.name.localeCompare(vB.name);
+        if (sortOption === 'name_desc') return vB.name.localeCompare(vA.name);
+        return 0;
+    });
+
+    // Populate Garage (Owned)
+    Object.keys(VehicleBlueprints).filter(k => userData.unlocked.includes(k)).forEach(key => {
+        const v = VehicleBlueprints[key];
+        const thumbUrl = generateThumbnail(key);
+
+        const card = document.createElement('div');
+        card.className = `group relative bg-gray-800 border-2 border-gray-600 hover:border-blue-400 rounded-xl p-4 flex flex-col transition-all transform hover:scale-105`;
+        
+        card.innerHTML = `
+            <img src="${thumbUrl}" alt="${v.name}" class="h-20 mx-auto mb-2 drop-shadow-md">
+            <h4 class="text-lg font-bold text-blue-300 truncate text-center">${v.name}</h4>
+            <div class="flex justify-between items-center mt-2 mb-3">
+                <span class="text-xs px-2 py-1 bg-gray-700 rounded text-gray-300">${v.category}</span>
+                <span class="text-xs text-gray-400">Pwr: ${Math.round(v.power * 1000)}</span>
+            </div>
+        `;
+        const btn = document.createElement('button');
+        btn.className = "w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors";
+        btn.innerText = currentBike === key ? "Equipped" : "Ride";
+        if(currentBike === key) btn.classList.replace('bg-blue-600', 'bg-green-600');
+        btn.onclick = () => { currentBike = key; saveUserData(); buildUI(); };
+        card.appendChild(btn);
+        vGrid.appendChild(card);
+    });
+
+    // Populate Shop (Unowned, Sorted)
+    shopKeys.forEach(key => {
+        const v = VehicleBlueprints[key];
+        const thumbUrl = generateThumbnail(key);
+
+        const card = document.createElement('div');
+        card.className = `group relative bg-gray-800 border-2 border-gray-700 hover:border-yellow-400 rounded-xl p-4 flex flex-col transition-all transform hover:scale-105`;
+        
+        card.innerHTML = `
+            <img src="${thumbUrl}" alt="${v.name}" class="h-20 mx-auto mb-2 drop-shadow-md">
+            <h4 class="text-lg font-bold text-gray-300 truncate text-center">${v.name}</h4>
+            <div class="flex justify-between items-center mt-2 mb-3">
+                <span class="text-xs px-2 py-1 bg-gray-700 rounded text-gray-300">${v.category}</span>
+                <span class="text-xs text-gray-400">Pwr: ${Math.round(v.power * 1000)}</span>
+            </div>
+        `;
+        const btn = document.createElement('button');
+        btn.className = `w-full py-2 font-bold rounded-lg transition-colors ${userData.coins >= v.price ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`;
+        btn.innerHTML = `Buy 💰 ${v.price.toLocaleString()}`;
+        btn.onclick = () => {
+            if (userData.coins >= v.price) {
+                userData.coins -= v.price;
+                userData.unlocked.push(key);
+                saveUserData();
+                buildUI();
+            }
+        };
+        card.appendChild(btn);
+        sGrid.appendChild(card);
+    });
+
+    // Populate Avatars
+    Avatars.forEach(av => {
+        const isOwned = userData.unlockedAvatars.includes(av.id);
+        const isEquipped = currentAvatar.id === av.id;
+        const btn = document.createElement('button');
+        
+        btn.className = `group relative bg-gray-800 border-2 ${isEquipped ? 'border-green-400' : 'border-gray-600'} hover:border-green-400 rounded-xl p-4 w-40 flex flex-col items-center transition-all duration-200 transform hover:scale-105`;
+        
+        let statusHtml = '';
+        if (isOwned) {
+            statusHtml = `<span class="mt-2 text-xs font-bold ${isEquipped ? 'text-green-400' : 'text-gray-400'}">${isEquipped ? 'EQUIPPED' : 'OWNED'}</span>`;
+        } else {
+            statusHtml = `<span class="mt-2 text-xs font-bold ${userData.coins >= av.price ? 'text-yellow-400' : 'text-red-400'}">💰 ${av.price}</span>`;
+        }
+        
+        btn.innerHTML = `
+            <div class="w-12 h-12 rounded-full mb-2 shadow-[0_0_10px_rgba(255,255,255,0.2)]" style="background-color: ${av.color}; border: 2px solid #fff;"></div>
+            <h4 class="text-md font-bold text-gray-200 group-hover:text-white text-center">${av.name}</h4>
+            ${statusHtml}
+        `;
+        
+        btn.onclick = () => { 
+            if (isOwned) {
+                currentAvatar = av; 
+                saveUserData();
+                document.getElementById('avatarSelection').classList.add('hidden'); 
+                document.getElementById('homeScreen').classList.remove('hidden'); 
+                buildUI();
+            } else if (userData.coins >= av.price) {
+                userData.coins -= av.price;
+                userData.unlockedAvatars.push(av.id);
+                currentAvatar = av;
+                saveUserData();
+                buildUI();
+            }
+        };
+        aGrid.appendChild(btn);
+    });
+}
+
+// Added Event Listener for the Sort Dropdown
+document.getElementById('shopSort').addEventListener('change', buildUI);
+
+
+const mGrid = document.getElementById('mapGrid');
+for (let i = 1; i <= 10; i++) {
+    const btn = document.createElement('button');
+    btn.className = `group relative bg-gray-800 border-2 ${currentMapLevel === i ? 'border-yellow-400' : 'border-gray-600'} hover:border-yellow-300 rounded-xl p-4 flex flex-col items-center transition-all duration-200 transform hover:scale-105`;
+    btn.innerHTML = `<div class="text-3xl mb-1">${i === 1 ? '🛣️' : i < 5 ? '⛰️' : i < 8 ? '🏔️' : '🌋'}</div><h4 class="text-md font-bold text-yellow-300 group-hover:text-yellow-400 text-center">Level ${i}</h4>`;
+    btn.onclick = () => {
+        currentMapLevel = i;
+        saveUserData();
+        Array.from(mGrid.children).forEach((c, idx) => { c.classList.remove('border-yellow-400'); c.classList.add('border-gray-600'); if (idx + 1 === i) { c.classList.add('border-yellow-400'); c.classList.remove('border-gray-600'); }});
+        document.getElementById('mapSelection').classList.add('hidden'); document.getElementById('homeScreen').classList.remove('hidden');
+    };
+    mGrid.appendChild(btn);
+}
+
+
+// --- Terrain System ---
+function initTerrain() {
+    terrain = [];
+    terrainState = 'flat';
+    terrainStateTimer = 0;
+    let startY = GROUND_Y;
+    for(let x = 0; x < GAME_WIDTH + 500; x += terrainSegmentWidth) {
+        terrain.push({x: x, y: startY});
+    }
+}
+
+function updateTerrain() {
+    if (gameState !== 'playing') return;
+    let speed = SCROLL_SPEED;
+    for(let i=0; i<terrain.length; i++) terrain[i].x -= speed;
+    while(terrain[0].x < -terrainSegmentWidth) terrain.shift();
+    
+    while(terrain[terrain.length-1].x < GAME_WIDTH + 200) {
+        let last = terrain[terrain.length-1];
+        let nextX = last.x + terrainSegmentWidth;
+        
+        if (terrainStateTimer <= 0) {
+            let rand = Math.random();
+            if (currentMapLevel === 1 || rand < 0.4) {
+                terrainState = 'flat'; currentSlope = (GROUND_Y - last.y) * 0.1; terrainStateTimer = 3 + Math.random() * 5;
+            } else if (rand < 0.7) {
+                terrainState = 'uphill'; currentSlope = -((currentMapLevel * 3) + Math.random() * currentMapLevel * 2); terrainStateTimer = 2 + Math.random() * (currentMapLevel / 2);
+            } else {
+                terrainState = 'downhill'; currentSlope = ((currentMapLevel * 3) + Math.random() * currentMapLevel * 2); terrainStateTimer = 2 + Math.random() * (currentMapLevel / 2);
+            }
+        }
+        
+        let nextY = last.y + currentSlope * (terrainSegmentWidth / 50);
+        terrainStateTimer--;
+        
+        if (nextY > GROUND_Y + 150) nextY = GROUND_Y + 150;
+        if (nextY < GROUND_Y - 300) nextY = GROUND_Y - 300;
+        terrain.push({x: nextX, y: nextY});
+    }
+}
+
+function getTerrainAt(x) {
+    if (!terrain.length) return { y: GROUND_Y, slope: 0 };
+    for(let i=0; i<terrain.length-1; i++) {
+        if (x >= terrain[i].x && x <= terrain[i+1].x) {
+            let p1 = terrain[i]; let p2 = terrain[i+1];
+            let t = (x - p1.x) / (p2.x - p1.x);
+            return { y: p1.y + t * (p2.y - p1.y), slope: Math.atan2(-(p2.y - p1.y), p2.x - p1.x) };
+        }
+    }
+    return { y: GROUND_Y, slope: 0 };
+}
+
+
+// --- Physics & Player ---
+class PlayerBike {
+    constructor(blueprintKey) {
+        this.blueprint = VehicleBlueprints[blueprintKey];
+        this.x = GAME_WIDTH * 0.3; 
+        this.angle = 0; 
+        this.angularVelocity = 0;
+        this.wheelRotation = 0;
+        
+        let terr = getTerrainAt(this.x);
+        this.y = terr.y - this.blueprint.rearWheelR;
+        this.vy = 0;
+        this.isJumping = false;
+        this.lastTerrainY = this.y;
+
+        // New Mechanics
+        this.hasStartedWheelie = false;
+        this.isFlipping = false;
+        this.flipAngle = 0;
+    }
+
+    update() {
+        if (gameState !== 'playing') return;
+
+        let terr = getTerrainAt(this.x);
+        let targetY = terr.y - this.blueprint.rearWheelR;
+        let slopeAngle = terr.slope;
+
+        // Jump / Gravity Physics
+        this.vy += GRAVITY * 50; 
+        this.y += this.vy;
+
+        if (this.y >= targetY) {
+            this.y = targetY;
+            this.isJumping = false;
+            this.vy = targetY - this.lastTerrainY;
+        } else {
+            this.isJumping = true;
+        }
+        this.lastTerrainY = targetY;
+
+        // Flips (Only allow if significantly off a ledge/jump!)
+        if (keys.flip && this.isJumping && (targetY - this.y > 30) && !this.isFlipping) {
+            this.isFlipping = true;
+            this.flipAngle = 0;
+            keys.flip = false; 
+        }
+        
+        if (this.isFlipping) {
+            this.flipAngle += 0.2; // Spin speed
+            if (this.flipAngle >= Math.PI * 2) {
+                this.isFlipping = false;
+                this.flipAngle = 0;
+                runCoins += 50; // Big reward!
+            }
+        }
+
+        // Wheelie Rotation
+        if (!this.isFlipping) {
+            if (keys.wheelie) this.angularVelocity += this.blueprint.power;
+            if (keys.lean) this.angularVelocity -= this.blueprint.power * 1.5; 
+            const gravityTorque = GRAVITY * (this.blueprint.massCenter / this.blueprint.wheelbase) * Math.cos(this.angle - slopeAngle);
+            this.angularVelocity -= gravityTorque;
+            this.angularVelocity *= this.blueprint.stability;
+            this.angle += this.angularVelocity;
+        }
+
+        // Detect if wheelie started (threshold ~8.5 degrees)
+        if (!this.hasStartedWheelie && this.angle > 0.15) {
+            this.hasStartedWheelie = true;
+        }
+
+        // Victory Condition Check: Reached 1000 distance (scaled to take approx 1 minute)!
+        if (globalDistance >= 1000) {
+            triggerGameOver("MAP CLEARED!", true);
+            return;
+        }
+
+        let inAirFront = true;
+        let frontX = this.x + Math.cos(this.angle) * this.blueprint.wheelbase;
+        let frontY = this.y - Math.sin(this.angle) * this.blueprint.wheelbase;
+        let frontTerr = getTerrainAt(frontX);
+        let frontTargetY = frontTerr.y - this.blueprint.frontWheelR;
+
+        // Front tire collision
+        if (!this.isJumping && frontY >= frontTargetY) {
+            // CRITICAL GAME RULE: If wheelie started and front hits -> LOSE!
+            if (this.hasStartedWheelie) {
+                triggerGameOver("FRONT TIRE DROPPED!");
+                return;
+            } else {
+                // Just ride flat
+                this.angle = Math.atan2(-(frontTargetY - this.y), frontX - this.x);
+                if (this.angularVelocity < -0.05) this.angularVelocity = -this.angularVelocity * 0.3; 
+                else this.angularVelocity = 0;
+                inAirFront = false;
+            }
+        }
+
+        // Crash conditions
+        if (!this.isFlipping && this.angle > slopeAngle + (Math.PI / 2.1)) {
+            triggerGameOver("LOOPED OUT!");
+            return;
+        }
+        if (this.isFlipping && !this.isJumping) {
+            triggerGameOver("CRASHED DURING FLIP!");
+            return;
+        }
+
+        // Progress
+        this.wheelRotation += SCROLL_SPEED / this.blueprint.rearWheelR;
+        let prevDistance = Math.floor(globalDistance);
+        globalDistance += SCROLL_SPEED * 0.0185; // ~1000 distance per 60 seconds at 60 FPS
+        
+        // Passive Coin Generation (Scale strictly by distance)
+        if (Math.floor(globalDistance) > prevDistance && Math.floor(globalDistance) % 2 === 0) {
+            runCoins += 2;
+        }
+
+        if ((inAirFront || this.isJumping) && this.angle > slopeAngle + 0.1) {
+            framesInAir++;
+            scoreMultiplier = 1.0 + Math.floor(framesInAir / 30) * 0.5;
+            score += Math.floor((this.isJumping ? 2 : 1) * scoreMultiplier);
+        } else {
+            framesInAir = 0;
+            scoreMultiplier = 1.0;
+        }
+
+        updateHUD(this.angle - slopeAngle, inAirFront || this.isJumping);
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(-(this.angle + this.flipAngle)); 
+
+        this.blueprint.drawChassis(ctx, this.wheelRotation);
+        drawRider(ctx, currentAvatar, this.blueprint.posture, this.wheelRotation, this.blueprint.hasPedals);
+
+        ctx.save();
+        ctx.translate(this.blueprint.wheelbase, 0);
+        drawWheel(ctx, this.blueprint.frontWheelR, this.wheelRotation, this.blueprint.wheelType);
+        ctx.restore();
+        ctx.restore(); 
+
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        drawWheel(ctx, this.blueprint.rearWheelR, this.wheelRotation, this.blueprint.wheelType);
+        ctx.restore();
+    }
+}
+
+
+// --- Environment ---
+class Environment {
+    constructor() {
+        this.bgOffset1 = 0; this.bgOffset2 = 0; this.groundOffset = 0;
+        this.city1 = []; this.city2 = [];
+        for(let i=0; i<40; i++) {
+            this.city1.push({ w: 80 + Math.random()*100, h: 200 + Math.random()*300 });
+            this.city2.push({ w: 100 + Math.random()*150, h: 100 + Math.random()*200, windows: Math.random() > 0.3 });
+        }
+    }
+    update() {
+        if (gameState !== 'playing') return;
+        this.bgOffset1 = (this.bgOffset1 + SCROLL_SPEED * 0.1) % (GAME_WIDTH * 2);
+        this.bgOffset2 = (this.bgOffset2 + SCROLL_SPEED * 0.4) % (GAME_WIDTH * 2);
+        this.groundOffset = (this.groundOffset + SCROLL_SPEED) % 80;
+        updateTerrain();
+    }
+    draw(ctx) {
+        const skyGradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+        skyGradient.addColorStop(0, "#080b12"); skyGradient.addColorStop(1, "#1e1b4b");
+        ctx.fillStyle = skyGradient; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+        ctx.fillStyle = "#fde047"; ctx.beginPath(); ctx.arc(GAME_WIDTH * 0.8, GAME_HEIGHT * 0.2, 50, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "#080b12"; ctx.beginPath(); ctx.arc(GAME_WIDTH * 0.8 - 15, GAME_HEIGHT * 0.2 - 10, 45, 0, Math.PI*2); ctx.fill(); 
+
+        ctx.fillStyle = "#0f172a"; let curX1 = -this.bgOffset1;
+        for (let i = 0; i < this.city1.length; i++) { let b = this.city1[i]; ctx.fillRect(curX1, GROUND_Y - b.h, b.w, b.h); curX1 += b.w; if (curX1 > GAME_WIDTH + this.bgOffset1) break; }
+
+        let curX2 = -this.bgOffset2;
+        for (let i = 0; i < this.city2.length; i++) {
+            let b = this.city2[i]; ctx.fillStyle = "#1e293b"; ctx.fillRect(curX2, GROUND_Y - b.h, b.w, b.h);
+            if(b.windows) {
+                ctx.fillStyle = "#fef08a";
+                for(let wy = GROUND_Y - b.h + 20; wy < GROUND_Y - 20; wy += 30) {
+                    for(let wx = curX2 + 10; wx < curX2 + b.w - 20; wx += 25) {
+                        if(Math.random() > 0.4) { ctx.globalAlpha = 0.5 + Math.random()*0.5; ctx.fillRect(wx, wy, 10, 15); }
+                    }
+                }
+                ctx.globalAlpha = 1.0;
+            }
+            curX2 += b.w; if (curX2 > GAME_WIDTH + this.bgOffset2) break;
+        }
+
+        if (terrain.length > 0) {
+            ctx.fillStyle = "#111827"; ctx.beginPath(); ctx.moveTo(terrain[0].x, terrain[0].y);
+            for(let i=1; i<terrain.length; i++) ctx.lineTo(terrain[i].x, terrain[i].y);
+            ctx.lineTo(terrain[terrain.length-1].x, GAME_HEIGHT); ctx.lineTo(terrain[0].x, GAME_HEIGHT); ctx.fill();
+            
+            ctx.strokeStyle = "#eab308"; ctx.lineWidth = 4; ctx.setLineDash([40, 40]); ctx.lineDashOffset = -this.groundOffset;
+            ctx.beginPath(); for(let i=0; i<terrain.length; i++) { if (i===0) ctx.moveTo(terrain[i].x, terrain[i].y + 15); else ctx.lineTo(terrain[i].x, terrain[i].y + 15); } ctx.stroke(); ctx.setLineDash([]);
+            
+            ctx.strokeStyle = "#475569"; ctx.lineWidth = 6; ctx.beginPath(); for(let i=0; i<terrain.length; i++) { if (i===0) ctx.moveTo(terrain[i].x, terrain[i].y); else ctx.lineTo(terrain[i].x, terrain[i].y); } ctx.stroke();
+        }
+    }
+}
+
+
+// --- Core Loop ---
+let player;
+let environment = new Environment();
+
+function initGame(bikeType) {
+    initTerrain();
+    player = new PlayerBike(bikeType);
+    score = 0;
+    runCoins = 0;
+    scoreMultiplier = 1.0;
+    framesInAir = 0;
+    globalDistance = 0;
+    gameState = 'playing';
+    isPaused = false;
+    
+    document.getElementById('mainMenu').classList.add('hidden');
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('pauseScreen').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+    if (GAME_WIDTH < 768) document.getElementById('touchControls').classList.remove('hidden');
+    
+    keys.wheelie = false; keys.lean = false; keys.flip = false;
+}
+
+function triggerGameOver(reason, isVictory = false) {
+    gameState = 'gameover';
+    
+    const crashTitle = document.getElementById('crashReason');
+    const finalScoreLabel = document.getElementById('finalScore');
+    
+    if (isVictory) {
+        crashTitle.innerText = "MAP CLEARED!";
+        crashTitle.className = "text-5xl md:text-7xl font-black italic text-green-500 mb-2 drop-shadow-lg text-center";
+        let bonus = currentMapLevel * 1000; // Harder map = more money!
+        runCoins += bonus;
+        finalScoreLabel.innerHTML = `${Math.floor(globalDistance).toLocaleString()}<br><span class="text-green-400 text-xl font-bold">Map Completion Bonus: +${bonus} Coins</span>`;
+    } else {
+        crashTitle.innerText = reason;
+        crashTitle.className = "text-5xl md:text-7xl font-black italic text-red-500 mb-2 drop-shadow-lg text-center";
+        finalScoreLabel.innerHTML = Math.floor(globalDistance).toLocaleString();
+    }
+    
+    // Total Run Coins (Already accumulated distance coins + flip coins + potential victory bonus)
+    let totalRunCoins = runCoins;
+    
+    document.getElementById('finalCoinsEarned').innerText = totalRunCoins.toLocaleString();
+    
+    // Save to Firebase
+    userData.coins += totalRunCoins;
+    saveUserData();
+    
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('touchControls').classList.add('hidden');
+}
+
+function updateHUD(angle, inAir) {
+    document.getElementById('scoreDisplay').innerText = score.toLocaleString();
+    document.getElementById('runCoinsDisplay').innerText = `+${runCoins} Coins`;
+    
+    const txtMult = document.getElementById('multiplierDisplay');
+    if (inAir) { txtMult.innerText = `${scoreMultiplier.toFixed(1)}x Combo`; txtMult.className = "text-xl md:text-2xl font-bold text-yellow-400 mt-1 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]"; } 
+    else { txtMult.innerText = `1.0x Combo`; txtMult.className = "text-xl md:text-2xl font-bold text-gray-400 mt-1 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]"; }
+
+    document.getElementById('angleDisplay').innerText = `Angle: ${(angle * (180 / Math.PI)).toFixed(1)}°`;
+    document.getElementById('speedDisplay').innerText = `${Math.round(45 + Math.sin(Date.now() / 200) * 2 - (inAir ? angle * 5 : 0))} MPH`;
+}
+
+function gameLoop() {
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    if (!isPaused) {
+        environment.update();
+        if (player) { player.update(); }
+    }
+    
+    environment.draw(ctx);
+    if (player) { player.draw(ctx); }
+    
+    requestAnimationFrame(gameLoop);
+}
+
+// --- UI Event Wiring ---
+const panels = ['homeScreen', 'vehicleSelection', 'shopSelection', 'avatarSelection', 'mapSelection'];
+function showPanel(panelId) {
+    panels.forEach(p => document.getElementById(p).classList.add('hidden'));
+    document.getElementById(panelId).classList.remove('hidden');
+    buildUI(); // Refresh state
+}
+
+document.getElementById('btnRideNow').onclick = () => initGame(currentBike);
+document.getElementById('btnShowVehicles').onclick = () => showPanel('vehicleSelection');
+document.getElementById('btnShowShop').onclick = () => showPanel('shopSelection');
+document.getElementById('btnShowAvatars').onclick = () => showPanel('avatarSelection');
+document.getElementById('btnShowMaps').onclick = () => showPanel('mapSelection');
+
+document.querySelectorAll('.btnBackToHome').forEach(btn => {
+    btn.onclick = () => showPanel('homeScreen');
+});
+
+document.getElementById('btnRestart').onclick = () => initGame(currentBike);
+document.getElementById('btnGarageFromDeath').onclick = () => {
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('mainMenu').classList.remove('hidden');
+    showPanel('homeScreen');
+};
+
+document.getElementById('btnResume').onclick = togglePause;
+document.getElementById('btnQuitToMenu').onclick = () => {
+    isPaused = false;
+    gameState = 'menu';
+    document.getElementById('pauseScreen').classList.add('hidden');
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('touchControls').classList.add('hidden');
+    document.getElementById('mainMenu').classList.remove('hidden');
+    showPanel('homeScreen');
+};
+
+// Start
+initFirebase();
+gameLoop();
+
+</script>
+</body>
+</html>
